@@ -1,8 +1,3 @@
-// # 设置256位密钥（64个十六进制字符）
-// export ENCRYPTION_KEY="00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF"
-// # 设置128位IV（32个十六进制字符）
-// export ENCRYPTION_IV="AABBCCDDEEFF00112233445566778899"
-
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -138,25 +133,116 @@ int main() {
         KeyValueStore store;
         PutOption option;
 
-        // 测试不加密存储
-        std::string key1 = "test1.txt";
-        std::string value1 = "This is a test string.";
-        option.encrypt = false;
-        store.put(key1, value1, option);
+        int numFiles = 100; // 处理的文件数量
 
-        std::string result1;
-        store.get(key1, result1);
-        std::cout << "Retrieved value (not encrypted): " << result1 << std::endl;
+        // 创建测试目录
+        std::string correctnessDir = "correctness_tests_aes";
+        std::string performanceDir = "performance_tests_aes";
+        std::filesystem::create_directory(correctnessDir);
+        std::filesystem::create_directory(performanceDir);
 
-        // 测试加密存储
-        std::string key2 = "test2.txt";
-        std::string value2 = "This is another test string.";
-        option.encrypt = true;
-        store.put(key2, value2, option);
+        // 正确性验证（加密）
+        bool allCorrect = true;
+        for (int i = 0; i < numFiles; ++i) {
+            std::string key = correctnessDir + "/correct_enc" + std::to_string(i) + ".txt";
+            std::string value(1024, 'A');  // 214B的测试数据
+            option.encrypt = true;
+            store.put(key, value, option);
 
-        std::string result2;
-        store.get(key2, result2);
-        std::cout << "Retrieved value (encrypted): " << result2 << std::endl;
+            std::string result;
+            store.get(key, result);
+
+            if (result != value) {
+                std::cerr << "Data mismatch for file (encrypted): " << key << std::endl;
+                allCorrect = false;
+            }
+        }
+
+        // 正确性验证（不加密）
+        for (int i = 0; i < numFiles; ++i) {
+            std::string key = correctnessDir + "/correct_plain" + std::to_string(i) + ".txt";
+            std::string value(214, 'B');  // 214B的测试数据
+            option.encrypt = false;
+            store.put(key, value, option);
+
+            std::string result;
+            store.get(key, result);
+
+            if (result != value) {
+                std::cerr << "Data mismatch for file (plain): " << key << std::endl;
+                allCorrect = false;
+            }
+        }
+
+        if (allCorrect) {
+            std::cout << "All files were decrypted correctly." << std::endl;
+        } else {
+            std::cout << "Some files were not decrypted correctly." << std::endl;
+            return 1; // 如果文件不正确，不继续性能测试
+        }
+
+        // 性能测试（加密）
+        size_t totalBytesEncrypted = 0;
+        size_t totalBytesDecrypted = 0;
+        auto start = std::chrono::high_resolution_clock::now();
+
+        for (int i = 0; i < numFiles; ++i) {
+            std::string key = performanceDir + "/perf_enc" + std::to_string(i) + ".txt";
+            std::string value(214, 'A');
+            option.encrypt = true;
+            store.put(key, value, option);
+            totalBytesEncrypted += value.size();
+        }
+
+        auto mid = std::chrono::high_resolution_clock::now();
+
+        for (int i = 0; i < numFiles; ++i) {
+            std::string key = performanceDir + "/perf_enc" + std::to_string(i) + ".txt";
+            std::string result;
+            store.get(key, result);
+            totalBytesDecrypted += result.size();
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+
+        std::chrono::duration<double> encryptTime = mid - start;
+        std::chrono::duration<double> decryptTime = end - mid;
+
+        std::cout << "Processed " << numFiles << " encrypted files." << std::endl;
+        std::cout << "Encryption speed (encrypted): " << totalBytesEncrypted / encryptTime.count() / 1024.0 << " KB/s" << std::endl;
+        std::cout << "Decryption speed (encrypted): " << totalBytesDecrypted / decryptTime.count() / 1024.0 << " KB/s" << std::endl;
+
+        // 性能测试（不加密）
+        totalBytesEncrypted = 0;
+        totalBytesDecrypted = 0;
+        start = std::chrono::high_resolution_clock::now();
+
+        for (int i = 0; i < numFiles; ++i) {
+            std::string key = performanceDir + "/perf_plain" + std::to_string(i) + ".txt";
+            std::string value(214, 'B');
+            option.encrypt = false;
+            store.put(key, value, option);
+            totalBytesEncrypted += value.size();
+        }
+
+        mid = std::chrono::high_resolution_clock::now();
+
+        for (int i = 0; i < numFiles; ++i) {
+            std::string key = performanceDir + "/perf_plain" + std::to_string(i) + ".txt";
+            std::string result;
+            store.get(key, result);
+            totalBytesDecrypted += result.size();
+        }
+
+        end = std::chrono::high_resolution_clock::now();
+
+        encryptTime = mid - start;
+        decryptTime = end - mid;
+
+        std::cout << "Processed " << numFiles << " plain files." << std::endl;
+        std::cout << "Encryption speed (plain): " << totalBytesEncrypted / encryptTime.count() / 1024.0 << " KB/s" << std::endl;
+        std::cout << "Decryption speed (plain): " << totalBytesDecrypted / decryptTime.count() / 1024.0 << " KB/s" << std::endl;
+
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
     }
