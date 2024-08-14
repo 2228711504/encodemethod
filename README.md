@@ -33,3 +33,5 @@ export RSA_PRIVATE_KEY_PATH="./private_key.der"
 g++ -std=c++17 encode3.cpp -o encode3 -lcryptopp
 ```
 
+RSA/OAEP-MGF1(SHA-1): message length of 1024 exceeds the maximum of 214 for this public key
+
